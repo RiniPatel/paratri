@@ -7,9 +7,12 @@
 #include <stdlib.h>
 #include <omp.h>
 #include <string>
+#include "triangle_ref.h"
+#include "cycletimer.h"
 
-typedef unsigned int uint32_t;
 using namespace std;
+
+#define NUM_ITER 100
 
 /**
  * This function reads the input data. 
@@ -65,11 +68,12 @@ uint32_t count_triangles(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t NUM_A)
 	// with vertex 1
 	for (uint32_t i = 1; i < N - 1; i++) {
 		uint32_t num_nnz_curr_row_x = IA[i + 1] - IA[i];
-		uint32_t *x_col_begin = JA + IA[i];
-		uint32_t *row_bound = JA + IA[i + 1];
+		uint32_t *x_col_begin = &JA[IA[i]];
+		uint32_t *row_bound = &JA[IA[i + 1]];
 		uint32_t *x_col_end = row_bound;
 
-		for (int idx = 0; idx < num_nnz_curr_row_x; idx++)
+		// printf("%d\n", num_nnz_curr_row_x);
+		for (uint32_t idx = 0; idx < num_nnz_curr_row_x; idx++)
 		{
 			if (x_col_begin[idx] > (i - 1)) {
 				x_col_end = &x_col_begin[idx];
@@ -91,6 +95,8 @@ uint32_t count_triangles(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t NUM_A)
 			for (uint32_t k = 0; k < num_nnz_x && *A_col <= (i - 1); ++k) {
 				while ((*A_col < x_col[k])	&& (A_col < A_col_max)) ++A_col;
 				delta += (*A_col == x_col[k]);
+
+				// for triangle enumeration i, *x_col_end, *A_col
 			}
 		}
 	}
@@ -132,8 +138,23 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	uint32_t num_triangle = count_triangles(IA, JA, N, NUM_A);
-	printf("num_triangle in %s : %u\n", file_name.c_str(), num_triangle);
+	uint64_t total_triangle = 0;
+	double start = currentSeconds();
+	for (int i = 0; i < NUM_ITER; i++) {
+		total_triangle += count_triangles_orig(IA, JA, N, NUM_A);
+	}
+	double end = currentSeconds();
+	double timeTaken = (end - start)/(double)NUM_ITER;
+	printf("ref %lf num_triangles = %lu \n", timeTaken, total_triangle/NUM_ITER);
+
+	total_triangle = 0;
+	start = currentSeconds();
+	for (int i = 0; i < NUM_ITER; i++) {
+		total_triangle += count_triangles(IA, JA, N, NUM_A);
+	}
+	end = currentSeconds();
+	timeTaken = (end - start)/(double)NUM_ITER;
+	printf("new %lf num_triangles = %lu \n", timeTaken, total_triangle/NUM_ITER);
 
 	free(IA);
 	free(JA);
