@@ -12,7 +12,7 @@
 
 using namespace std;
 
-#define NUM_ITER 100
+#define NUM_ITER 10
 
 /**
  * This function reads the input data. 
@@ -139,23 +139,36 @@ int main(int argc, char **argv)
 	}
 
 	uint64_t total_triangle = 0;
-	double start = currentSeconds();
-	for (int i = 0; i < NUM_ITER; i++) {
-		total_triangle += count_triangles_orig(IA, JA, N, NUM_A);
-	}
-	double end = currentSeconds();
-	double timeTaken = (end - start)/(double)NUM_ITER;
-	printf("ref %lf num_triangles = %lu \n", timeTaken, total_triangle/NUM_ITER);
+	uint64_t total_triangle_ref = 0;
+	double start, end, timeTaken = 0;
 
-	total_triangle = 0;
-	start = currentSeconds();
 	for (int i = 0; i < NUM_ITER; i++) {
-		total_triangle += count_triangles(IA, JA, N, NUM_A);
+		start = currentSeconds();
+		total_triangle_ref += count_triangles_orig(IA, JA, N, NUM_A);
+		end = currentSeconds();
+		timeTaken += end - start;
 	}
-	end = currentSeconds();
-	timeTaken = (end - start)/(double)NUM_ITER;
+	
+	timeTaken = timeTaken/(double)NUM_ITER;
+	printf("ref %lf num_triangles = %lu \n", timeTaken, total_triangle_ref/NUM_ITER);
+
+	timeTaken = 0;
+	for (int i = 0; i < NUM_ITER; i++) {
+		start = currentSeconds();
+		total_triangle += count_triangles(IA, JA, N, NUM_A);
+		end = currentSeconds();
+		timeTaken += end - start;
+	}
+	timeTaken = timeTaken/(double)NUM_ITER;
 	printf("new %lf num_triangles = %lu \n", timeTaken, total_triangle/NUM_ITER);
 
 	free(IA);
 	free(JA);
+
+	if (total_triangle_ref != total_triangle) {
+		printf("Correctness FAIL\n");
+		return -1;
+	}
+
+	return 0;
 }
