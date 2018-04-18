@@ -176,7 +176,7 @@ int main(int argc, char **argv)
 		end = currentSeconds();
 		timeTaken += end - start;
 	}
-	dump_triangle_to_disk(file_name + "_ref_triangles.txt", triangle_list, total_triangle_ref / NUM_ITER);
+	// dump_triangle_to_disk(file_name + "_ref_triangles.txt", triangle_list, total_triangle_ref / NUM_ITER);
 	
 	timeTaken = timeTaken/(double)NUM_ITER;
 	printf("ref %lf num_triangles = %lu \n", timeTaken, total_triangle_ref/NUM_ITER);
@@ -189,7 +189,7 @@ int main(int argc, char **argv)
 		timeTaken += end - start;
 	}
 
-	dump_triangle_to_disk(file_name + "_triangles.txt", triangle_list, total_triangle / NUM_ITER);
+	// dump_triangle_to_disk(file_name + "_triangles.txt", triangle_list, total_triangle / NUM_ITER);
 
 	timeTaken = timeTaken/(double)NUM_ITER;
 	printf("new %lf num_triangles = %lu \n", timeTaken, total_triangle/NUM_ITER);
