@@ -13,6 +13,7 @@
 using namespace std;
 
 #define NUM_ITER 10
+#define MAX_TRIANGLES 20000000
 
 /**
  * This function reads the input data. 
@@ -49,6 +50,26 @@ int fill_input(string file_name, uint32_t *IA, uint32_t *JA)
 	return 0;
 }
 
+int dump_triangle_to_disk(string file_name, uint32_t * triangle_list, uint32_t num_triangles)
+{
+	FILE * file_triangles = fopen(file_name.c_str(), "w");
+
+	if (file_triangles == NULL) {
+		return -1;
+	}
+
+	for (uint32_t i = 0; i < num_triangles; i++)
+	{
+		int idx = i * 3;
+		fprintf(file_triangles, "%d %d %d\n", triangle_list[idx], triangle_list[idx + 1], triangle_list[idx + 2]);
+	}
+	fflush(file_triangles);
+
+	fclose(file_triangles);
+
+	return 0;
+}
+
 /*
 This function computes the number of triangles in the graph
 
@@ -60,7 +81,7 @@ Description of algorithm:
 			the algorithm checks if there is a triangle (x, y, z) where
 				x has a smaller number than i, and z has a larger number than i.
 */
-uint32_t count_triangles(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t NUM_A)
+uint32_t count_triangles(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t NUM_A, uint32_t * triangle_list)
 {
 	uint32_t delta = 0;
 
@@ -94,9 +115,15 @@ uint32_t count_triangles(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t NUM_A)
 			// this loop searches through all possible vertices for z.
 			for (uint32_t k = 0; k < num_nnz_x && *A_col <= (i - 1); ++k) {
 				while ((*A_col < x_col[k])	&& (A_col < A_col_max)) ++A_col;
-				delta += (*A_col == x_col[k]);
 
 				// for triangle enumeration i, *x_col_end, *A_col
+				if (*A_col == x_col[k]) {
+					int idx = delta * 3;
+					triangle_list[idx] = i;
+					triangle_list[idx+1] = *A_col;
+					triangle_list[idx+2] = x_col_end[j];
+					delta += 1;
+				}
 			}
 		}
 	}
@@ -130,6 +157,7 @@ int main(int argc, char **argv)
 
 	uint32_t *IA = (uint32_t*)malloc((N + 1) * sizeof(uint32_t));
 	uint32_t *JA = (uint32_t*)malloc(NUM_A * sizeof(uint32_t));
+	uint32_t * triangle_list = (uint32_t*)malloc(MAX_TRIANGLES * 3 * sizeof(uint32_t));
 
 	if (fill_input(file_name, IA, JA) < 0 ) {
 		free(IA);
@@ -144,10 +172,11 @@ int main(int argc, char **argv)
 
 	for (int i = 0; i < NUM_ITER; i++) {
 		start = currentSeconds();
-		total_triangle_ref += count_triangles_orig(IA, JA, N, NUM_A);
+		total_triangle_ref += count_triangles_orig(IA, JA, N, NUM_A, triangle_list);
 		end = currentSeconds();
 		timeTaken += end - start;
 	}
+	dump_triangle_to_disk(file_name + "_ref_triangles.txt", triangle_list, total_triangle_ref / NUM_ITER);
 	
 	timeTaken = timeTaken/(double)NUM_ITER;
 	printf("ref %lf num_triangles = %lu \n", timeTaken, total_triangle_ref/NUM_ITER);
@@ -155,10 +184,13 @@ int main(int argc, char **argv)
 	timeTaken = 0;
 	for (int i = 0; i < NUM_ITER; i++) {
 		start = currentSeconds();
-		total_triangle += count_triangles(IA, JA, N, NUM_A);
+		total_triangle += count_triangles(IA, JA, N, NUM_A, triangle_list);
 		end = currentSeconds();
 		timeTaken += end - start;
 	}
+
+	dump_triangle_to_disk(file_name + "_triangles.txt", triangle_list, total_triangle / NUM_ITER);
+
 	timeTaken = timeTaken/(double)NUM_ITER;
 	printf("new %lf num_triangles = %lu \n", timeTaken, total_triangle/NUM_ITER);
 

@@ -1,6 +1,6 @@
 #include "triangle_ref.h"
 
-unsigned int count_triangles_orig(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t NUM_A) {
+unsigned int count_triangles_orig(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t NUM_A, uint32_t * triangle_list) {
     unsigned int delta = 0;
 
     //The outer loop traverses over all the vertices. The iteration starts with vertex 1
@@ -40,8 +40,15 @@ unsigned int count_triangles_orig(uint32_t *IA, uint32_t *JA, uint32_t N, uint32
 
                 unsigned int row_index_x = *x_col - x_col_first;
                 while ((*A_col < *x_col) && (A_col < A_col_max)) ++A_col;
-                delta += (*A_col == row_index_x);
                 ++x_col;
+
+                if (*A_col == row_index_x) {
+                    int idx = delta * 3;
+                    triangle_list[idx] = i;             
+                    triangle_list[idx + 1] = *A_col;
+                    triangle_list[idx + 2] = *y_col;
+                    delta += 1;
+                }
             }
         }
     }
