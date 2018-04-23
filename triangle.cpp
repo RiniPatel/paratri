@@ -15,6 +15,8 @@ using namespace std;
 #define NUM_ITER 10
 #define MAX_TRIANGLES 20000000
 
+void printCudaInfo();
+uint32_t count_triangles_cuda(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t NUM_A, uint32_t * triangle_list);
 /**
  * This function reads the input data. 
  * It populates the IA and JA arrays used to store the adjacency matrix of 
@@ -81,7 +83,7 @@ Description of algorithm:
 			the algorithm checks if there is a triangle (x, y, z) where
 				x has a smaller number than i, and z has a larger number than i.
 */
-uint32_t count_triangles(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t NUM_A, uint32_t * triangle_list)
+uint32_t count_triangles_omp(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t NUM_A, uint32_t * triangle_list)
 {
 	uint32_t delta = 0;
 
@@ -169,8 +171,11 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	uint64_t total_triangle = 0;
-	uint64_t total_triangle_ref = 0;
+	#ifdef CUDA
+	printCudaInfo();
+	#endif
+
+	uint64_t total_triangle = 0, total_triangle_ref = 0;
 	double start, end, timeTaken = 0;
 
 	for (int i = 0; i < NUM_ITER; i++) {
@@ -187,7 +192,7 @@ int main(int argc, char **argv)
 	timeTaken = 0;
 	for (int i = 0; i < NUM_ITER; i++) {
 		start = currentSeconds();
-		total_triangle += count_triangles(IA, JA, N, NUM_A, triangle_list);
+		total_triangle += count_triangles_omp(IA, JA, N, NUM_A, triangle_list);
 		end = currentSeconds();
 		timeTaken += end - start;
 	}
@@ -196,6 +201,22 @@ int main(int argc, char **argv)
 
 	timeTaken = timeTaken/(double)NUM_ITER;
 	printf("new %lf num_triangles = %lu \n", timeTaken, total_triangle/NUM_ITER);
+
+	#ifdef CUDA
+	timeTaken = 0;
+	uint64_t total_triangle_cuda = 0;
+	for (int i = 0; i < NUM_ITER; i++) {
+		start = currentSeconds();
+		total_triangle_cuda += count_triangles_cuda(IA, JA, N, NUM_A, triangle_list);
+		end = currentSeconds();
+		timeTaken += end - start;
+	}
+
+	// dump_triangle_to_disk(file_name + "_triangles.txt", triangle_list, total_triangle / NUM_ITER);
+
+	timeTaken = timeTaken/(double)NUM_ITER;
+	printf("cuda %lf num_triangles = %lu \n", timeTaken, total_triangle_cuda/NUM_ITER);
+	#endif
 
 	free(IA);
 	free(JA);

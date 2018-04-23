@@ -20,7 +20,7 @@ triangle-omp: $(CFILES) $(HFILES)
 	$(CC) $(CFLAGS) $(OMP) -o triangle-omp $(CFILES)
 
 triangle-cuda: $(CFILES) $(HFILES) $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $(OBJS) $(CFILES) $(LDFLAGS)
+	$(CC) $(CFLAGS) -DCUDA -o $@ $(OBJS) $(CFILES) $(LDFLAGS)
 
 %.o: %.cu
 	$(NVCC) $< $(NVCCFLAGS) -c -o $@
