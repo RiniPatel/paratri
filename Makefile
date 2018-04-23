@@ -1,23 +1,30 @@
-CC=g++
+CC=g++ -m64
 OMP=-fopenmp -DOMP
+LDFLAGS=-L/usr/local/depot/cuda-8.0/lib64/ -lcudart
+NVCC=nvcc
+NVCCFLAGS=-O3 -m64 --gpu-architecture compute_61
 
 DEBUG=0
 CFLAGS=-g -O3 -Wall -DDEBUG=$(DEBUG) -std=c++11
-LDFLAGS= -lm
 
 CFILES = triangle.cpp triangle_ref.cpp cycletimer.cpp
 HFILES = triangle_ref.h cycletimer.h
+OBJS = triangle_cuda.o
 
-GFILES = gengraph.py grun.py rutil.py sim.py viz.py  regress.py benchmark.py grade.py
-
-all: triangle triangle-omp
+all: triangle triangle-omp triangle-cuda
 
 triangle: $(CFILES) $(HFILES) 
-	$(CC) $(CFLAGS) -o triangle $(CFILES) $(LDFLAGS)
+	$(CC) $(CFLAGS) -o triangle $(CFILES)
 
 triangle-omp: $(CFILES) $(HFILES)
-	$(CC) $(CFLAGS) $(OMP) -o triangle-omp $(CFILES) $(LDFLAGS)
+	$(CC) $(CFLAGS) $(OMP) -o triangle-omp $(CFILES)
+
+triangle-cuda: $(CFILES) $(HFILES) $(OBJS)
+	$(CC) $(CFLAGS) -o $@ $(OBJS) $(CFILES) $(LDFLAGS)
+
+%.o: %.cu
+	$(NVCC) $< $(NVCCFLAGS) -c -o $@
 
 clean:
 	rm -f *.o
-	rm -f triangle triangle-omp
+	rm -f triangle triangle-omp triangle-cuda

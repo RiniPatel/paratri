@@ -88,7 +88,7 @@ uint32_t count_triangles(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t NUM_A,
 	// The outer loop traverses over all the vertices. The iteration starts 
 	// with vertex 1
 	#if OMP
-	#pragma omp parallel for schedule(static, 50) reduction(+:delta)
+	#pragma omp parallel for schedule(static, 4) reduction(+: delta)
 	#endif
 	for (uint32_t i = 1; i < N - 1; i++) {
 		uint32_t num_nnz_curr_row_x = IA[i + 1] - IA[i];
@@ -116,7 +116,7 @@ uint32_t count_triangles(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t NUM_A,
 			uint32_t *A_col_max = JA + IA[x_col_end[j] + 1];
 
 			// this loop searches through all possible vertices for z.
-			for (uint32_t k = 0; k < num_nnz_x && *A_col <= (i - 1); ++k) {
+			for (uint32_t k = 0; k < num_nnz_x; ++k) {
 				while ((*A_col < x_col[k])	&& (A_col < A_col_max)) ++A_col;
 
 				// for triangle enumeration i, *x_col_end, *A_col
