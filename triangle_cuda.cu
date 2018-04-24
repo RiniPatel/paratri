@@ -82,50 +82,19 @@ triangle_kernel(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t NUM_A,
     device_count[i] = delta;
 }
 
-
-/* Wrapper around the Thrust library's exclusive scan function
- * As above, copies the input onto the GPU and times only the execution
- * of the scan itself.
- * You are not expected to produce competitive performance to the
- * Thrust version.
- */
-double cudaScanThrust(int* inarray, int* end, int* resultarray) {
-
-    int length = end - inarray;
-    thrust::device_ptr<int> d_input = thrust::device_malloc<int>(length);
-    thrust::device_ptr<int> d_output = thrust::device_malloc<int>(length);
-    
-    cudaMemcpy(d_input.get(), inarray, length * sizeof(int), 
-               cudaMemcpyHostToDevice);
-
-    double startTime = currentSeconds();
-
-    thrust::exclusive_scan(d_input, d_input + length, d_output);
-
-    cudaThreadSynchronize();
-    double endTime = currentSeconds();
-
-    cudaMemcpy(resultarray, d_output.get(), length * sizeof(int),
-               cudaMemcpyDeviceToHost);
-    thrust::device_free(d_input);
-    thrust::device_free(d_output);
-    double overallDuration = endTime - startTime;
-    return overallDuration;
-}
-
 uint32_t count_triangles_cuda(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t NUM_A, uint32_t * triangle_list)
 {
     uint32_t *device_IA, *device_JA;
     uint32_t *device_output, *device_count;
     uint32_t num_triangles = 0;
 
-    uint32_t * local_count = (uint32_t *) malloc(N * sizeof(uint32_t));
-
     cudaMalloc((void **)&device_IA, (N + 1) * sizeof(uint32_t));
     cudaMalloc((void **)&device_JA, NUM_A * sizeof(uint32_t));
     cudaMalloc((void **)&device_output, 20000000 * sizeof(uint32_t));
     cudaMalloc((void **)&device_count, (N) * sizeof(uint32_t));
 
+    thrust::device_ptr<uint32_t> device_count_thrust = thrust::device_pointer_cast(device_count);
+    
     cudaMemcpy(device_IA, IA, (N + 1) * sizeof(uint32_t), 
                cudaMemcpyHostToDevice);
     cudaMemcpy(device_JA, JA, NUM_A * sizeof(uint32_t), 
@@ -138,23 +107,15 @@ uint32_t count_triangles_cuda(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t N
     triangle_kernel<<<blocks, threadsPerBlock>>>(device_IA, device_JA, N, NUM_A, 
         device_count, device_output);
     cudaThreadSynchronize();
+    thrust::inclusive_scan(device_count_thrust, device_count_thrust + N, device_count_thrust);
     double end = currentSeconds();
     printf("CUDA computation time is %lf\n", end - start);
 
-    // sum up the triangles
-    
-    cudaMemcpy(local_count, device_count, N * sizeof(uint32_t),
+    cudaMemcpy(&num_triangles, &device_count[N - 1], sizeof(uint32_t),
+               cudaMemcpyDeviceToHost);
+    cudaMemcpy(triangle_list, device_output, num_triangles * 3 * sizeof(uint32_t),
                cudaMemcpyDeviceToHost);
 
-    cudaMemcpy(triangle_list, device_output, 20000000 * sizeof(uint32_t),
-               cudaMemcpyDeviceToHost);
-
-    for (int i = 0; i < N; i++)
-    {
-        num_triangles += local_count[i];
-    }
-
-    free(local_count);
     cudaFree(device_IA);
     cudaFree(device_JA);
     cudaFree(device_count);
