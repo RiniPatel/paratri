@@ -9,10 +9,14 @@
 #include <thrust/device_malloc.h>
 #include <thrust/device_free.h>
 
+
 #include "cycletimer.h"
 
 #define LOG2_THREADS_PER_BLOCK 9
 #define THREADS_PER_BLOCK (1U << LOG2_THREADS_PER_BLOCK)
+
+#define SCAN_BLOCK_DIM   (THREADS_PER_BLOCK)  // needed by sharedMemExclusiveScan implementation
+#include "exclusiveScan.cu_inl"
 
 /* Helper function to round up to a power of 2. 
  */
@@ -36,50 +40,63 @@ triangle_kernel(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t NUM_A,
     // and given the block we are in
     int i = (blockIdx.x << LOG2_THREADS_PER_BLOCK) + threadIdx.x;
 
-    if (i == 0 || i > N - 2) {
-        return;
-    }
+    __shared__ uint32_t triangle_count_block[THREADS_PER_BLOCK];
+    __shared__ uint32_t prefix_sum_output[THREADS_PER_BLOCK];
+    __shared__ uint32_t prefix_sum_scratch[2* THREADS_PER_BLOCK];
 
-    uint32_t num_nnz_curr_row_x = IA[i + 1] - IA[i];
-    uint32_t *x_col_begin = &JA[IA[i]];
-    uint32_t *row_bound = &JA[IA[i + 1]];
-    uint32_t *x_col_end = row_bound;
-    int delta = 0;
-
-    for (uint32_t idx = 0; idx < num_nnz_curr_row_x; idx++)
+    triangle_count_block[threadIdx.x] = 0;
+    if (!(i == 0 || i > N - 2))
     {
-        if (x_col_begin[idx] > (i - 1)) {
-            x_col_end = &x_col_begin[idx];
-            break;
-        }
-    }
+        uint32_t num_nnz_curr_row_x = IA[i + 1] - IA[i];
+        uint32_t *x_col_begin = &JA[IA[i]];
+        uint32_t *row_bound = &JA[IA[i + 1]];
+        uint32_t *x_col_end = row_bound;
+        int delta = 0;
 
-    uint32_t num_nnz_y = (row_bound - x_col_end);
-    uint32_t num_nnz_x = (x_col_end - x_col_begin);
-
-    // This is where the real triangle counting begins.
-    // We search through all possible vertices for x
-    for (uint32_t j = 0; j < num_nnz_y; ++j) {
-        uint32_t *x_col = x_col_begin;
-        uint32_t *A_col = JA + IA[x_col_end[j]];
-        uint32_t *A_col_max = JA + IA[x_col_end[j] + 1];
-
-        // this loop searches through all possible vertices for z.
-        for (uint32_t k = 0; k < num_nnz_x; ++k) {
-            while ((*A_col < x_col[k])  && (A_col < A_col_max)) ++A_col;
-
-            // for triangle enumeration i, *x_col_end, *A_col
-            if (*A_col == x_col[k]) {
-                // int idx = delta * 3;
-                // triangle_list[idx] = i;
-                // triangle_list[idx+1] = *A_col;
-                // triangle_list[idx+2] = x_col_end[j];
-                delta += 1;
+        for (uint32_t idx = 0; idx < num_nnz_curr_row_x; idx++)
+        {
+            if (x_col_begin[idx] > (i - 1)) {
+                x_col_end = &x_col_begin[idx];
+                break;
             }
         }
+
+        uint32_t num_nnz_y = (row_bound - x_col_end);
+        uint32_t num_nnz_x = (x_col_end - x_col_begin);
+
+        // This is where the real triangle counting begins.
+        // We search through all possible vertices for x
+        for (uint32_t j = 0; j < num_nnz_y; ++j) {
+            uint32_t *x_col = x_col_begin;
+            uint32_t *A_col = JA + IA[x_col_end[j]];
+            uint32_t *A_col_max = JA + IA[x_col_end[j] + 1];
+
+            // this loop searches through all possible vertices for z.
+            for (uint32_t k = 0; k < num_nnz_x; ++k) {
+                while ((*A_col < x_col[k])  && (A_col < A_col_max)) ++A_col;
+
+                // for triangle enumeration i, *x_col_end, *A_col
+                if (*A_col == x_col[k]) {
+                    // int idx = delta * 3;
+                    // triangle_list[idx] = i;
+                    // triangle_list[idx+1] = *A_col;
+                    // triangle_list[idx+2] = x_col_end[j];
+                    delta += 1;
+                }
+            }
+        }
+        triangle_count_block[threadIdx.x] = delta;
     }
 
-    device_count[i] = delta;
+    __syncthreads();
+
+    sharedMemExclusiveScan(threadIdx.x, triangle_count_block, prefix_sum_output, prefix_sum_scratch, THREADS_PER_BLOCK);
+
+    __syncthreads();
+
+    if (threadIdx.x == 0) {
+        device_count[blockIdx.x] = prefix_sum_output[THREADS_PER_BLOCK - 1] + triangle_count_block[THREADS_PER_BLOCK - 1];
+    }
 }
 
 uint32_t count_triangles_cuda(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t NUM_A, uint32_t * triangle_list)
@@ -88,10 +105,14 @@ uint32_t count_triangles_cuda(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t N
     uint32_t *device_output, *device_count;
     uint32_t num_triangles = 0;
 
+    // call cuda kernel
+    const int threadsPerBlock = THREADS_PER_BLOCK;
+    const int blocks = (N - 2 + threadsPerBlock - 1) / threadsPerBlock;
+
     cudaMalloc((void **)&device_IA, (N + 1) * sizeof(uint32_t));
     cudaMalloc((void **)&device_JA, NUM_A * sizeof(uint32_t));
     cudaMalloc((void **)&device_output, 20000000 * sizeof(uint32_t));
-    cudaMalloc((void **)&device_count, (N) * sizeof(uint32_t));
+    cudaMalloc((void **)&device_count, blocks * sizeof(uint32_t));
 
     thrust::device_ptr<uint32_t> device_count_thrust = thrust::device_pointer_cast(device_count);
     
@@ -100,18 +121,15 @@ uint32_t count_triangles_cuda(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t N
     cudaMemcpy(device_JA, JA, NUM_A * sizeof(uint32_t), 
                cudaMemcpyHostToDevice);
 
-    // call cuda kernel
-    const int threadsPerBlock = THREADS_PER_BLOCK;
-    const int blocks = (N - 2 + threadsPerBlock - 1) / threadsPerBlock;
     double start = currentSeconds();
     triangle_kernel<<<blocks, threadsPerBlock>>>(device_IA, device_JA, N, NUM_A, 
         device_count, device_output);
     cudaThreadSynchronize();
-    thrust::inclusive_scan(device_count_thrust, device_count_thrust + N, device_count_thrust);
+    thrust::inclusive_scan(device_count_thrust, device_count_thrust + blocks, device_count_thrust);
     double end = currentSeconds();
     printf("CUDA computation time is %lf\n", end - start);
 
-    cudaMemcpy(&num_triangles, &device_count[N - 1], sizeof(uint32_t),
+    cudaMemcpy(&num_triangles, &device_count[blocks - 1], sizeof(uint32_t),
                cudaMemcpyDeviceToHost);
     cudaMemcpy(triangle_list, device_output, num_triangles * 3 * sizeof(uint32_t),
                cudaMemcpyDeviceToHost);
