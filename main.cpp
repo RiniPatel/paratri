@@ -11,6 +11,7 @@
 using namespace std;
 
 #define NUM_ITER 10
+#define DUMP_OUTPUT 0
 
 /**
  * This function reads the input data. 
@@ -49,12 +50,13 @@ int fill_input(string file_name, uint32_t *IA, uint32_t *JA)
 
 int dump_triangle_to_disk(string file_name, uint32_t * triangle_list, uint32_t num_triangles)
 {
+#if DUMP_OUTPUT
 	FILE * file_triangles = fopen(file_name.c_str(), "w");
 
 	if (file_triangles == NULL) {
 		return -1;
 	}
-
+	printf("Dumping %d triangles \n", num_triangles);
 	for (uint32_t i = 0; i < num_triangles; i++)
 	{
 		int idx = i * 3;
@@ -63,7 +65,7 @@ int dump_triangle_to_disk(string file_name, uint32_t * triangle_list, uint32_t n
 	fflush(file_triangles);
 
 	fclose(file_triangles);
-
+#endif
 	return 0;
 }
 
@@ -106,7 +108,7 @@ int main(int argc, char **argv)
 	printCudaInfo();
 	#endif
 
-	uint64_t total_triangle = 0, total_triangle_ref = 0;
+	uint64_t total_triangle_ref = 0;
 	double start, end, timeTaken = 0;
 
 	for (int i = 0; i < NUM_ITER; i++) {
@@ -115,24 +117,25 @@ int main(int argc, char **argv)
 		end = currentSeconds();
 		timeTaken += end - start;
 	}
-	// dump_triangle_to_disk(file_name + "_ref_triangles.txt", triangle_list, total_triangle_ref / NUM_ITER);
+	dump_triangle_to_disk(file_name + "_ref_triangles.txt", triangle_list, total_triangle_ref / NUM_ITER);
 	
 	timeTaken = timeTaken/(double)NUM_ITER;
 	printf("ref %lf num_triangles = %lu \n", timeTaken, total_triangle_ref/NUM_ITER);
 
 	#if OMP
+	uint64_t total_triangle_omp = 0;
 	timeTaken = 0;
 	for (int i = 0; i < NUM_ITER; i++) {
 		start = currentSeconds();
-		total_triangle += count_triangles_omp(IA, JA, N, NUM_A, triangle_list);
+		total_triangle_omp += count_triangles_omp(IA, JA, N, NUM_A, triangle_list);
 		end = currentSeconds();
 		timeTaken += end - start;
 	}
 
-	// dump_triangle_to_disk(file_name + "_triangles.txt", triangle_list, total_triangle / NUM_ITER);
+	dump_triangle_to_disk(file_name + "_omp_triangles.txt", triangle_list, total_triangle_omp / NUM_ITER);
 
 	timeTaken = timeTaken/(double)NUM_ITER;
-	printf("new %lf num_triangles = %lu \n", timeTaken, total_triangle/NUM_ITER);
+	printf("new %lf num_triangles = %lu \n", timeTaken, total_triangle_omp/NUM_ITER);
 	#endif
 
 	#ifdef CUDA
@@ -145,7 +148,7 @@ int main(int argc, char **argv)
 		timeTaken += end - start;
 	}
 
-	// dump_triangle_to_disk(file_name + "_triangles.txt", triangle_list, total_triangle / NUM_ITER);
+	dump_triangle_to_disk(file_name + "_cuda_triangles.txt", triangle_list, total_triangle_cuda / NUM_ITER);
 
 	timeTaken = timeTaken/(double)NUM_ITER;
 	printf("cuda %lf num_triangles = %lu \n", timeTaken, total_triangle_cuda/NUM_ITER);
@@ -154,7 +157,13 @@ int main(int argc, char **argv)
 	free(IA);
 	free(JA);
 
-	if (total_triangle_ref != total_triangle) {
+	#if OMP
+	if (total_triangle_ref != total_triangle_omp)
+	#endif
+	#if CUDA
+	if (total_triangle_ref != total_triangle_cuda)
+	#endif
+	{
 		printf("Correctness FAIL\n");
 		return -1;
 	}

@@ -105,6 +105,7 @@ uint32_t count_triangles_omp(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t NU
     #pragma omp parallel
     {
         int thr_id = omp_get_thread_num();
+        int delta = 0;
         prefix_sum_arr[thr_id] = 0;
 
         #pragma omp for schedule(static, 4)
@@ -138,15 +139,16 @@ uint32_t count_triangles_omp(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t NU
 
                     // for triangle enumeration i, *x_col_end, *A_col
                     if (*A_col == x_col[k]) {
-                        int idx = prefix_sum_arr[thr_id] * 3;
+                        int idx = delta * 3;
                         triangle_list[thr_id][idx] = i;
                         triangle_list[thr_id][idx+1] = *A_col;
                         triangle_list[thr_id][idx+2] = x_col_end[j];
-                        prefix_sum_arr[thr_id] += 1;
+                        delta++;
                     }
                 }
             }
         }
+        prefix_sum_arr[thr_id] = delta;
     }
     
     int temp = prefix_sum_arr[num_threads-1];
