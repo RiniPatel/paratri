@@ -4,8 +4,6 @@
  * @author Rini Patel (rinip)
  */
 
-#include <stdio.h>
-#include <stdlib.h>
 #include <string>
 #include "triangle.h"
 #include "cycletimer.h"
@@ -13,10 +11,7 @@
 using namespace std;
 
 #define NUM_ITER 10
-#define MAX_TRIANGLES 20000000
 
-void printCudaInfo();
-uint32_t count_triangles_cuda(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t NUM_A, uint32_t * triangle_list);
 /**
  * This function reads the input data. 
  * It populates the IA and JA arrays used to store the adjacency matrix of 

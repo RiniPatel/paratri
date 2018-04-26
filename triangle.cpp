@@ -1,6 +1,5 @@
-#include "triangle.h"
-
 #include <stdio.h>
+#include "triangle.h"
 
 /*
 This function computes the number of triangles in the graph
@@ -63,20 +62,52 @@ unsigned int count_triangles_orig(uint32_t *IA, uint32_t *JA, uint32_t N, uint32
 }
 
 #if OMP
-uint32_t count_triangles_omp(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t NUM_A, uint32_t * triangle_list)
+void cpu_exclusive_scan(int N, uint32_t* output)
 {
-    uint32_t delta = 0;
+    // upsweep phase
+    for (int twod = 1; twod < N; twod*=2)
+    {
+        int twod1 = twod*2;
+        // parallel
+        #pragma omp parallel for 
+        for (int i = 0; i < N; i += twod1)
+        {
+            output[i+twod1-1] += output[i+twod-1];
+        }
+    }
+    output[N-1] = 0;
 
+    // downsweep phase
+    for (int twod = N/2; twod >= 1; twod /= 2)
+    {
+        int twod1 = twod*2;
+        // parallel
+        #pragma omp parallel for 
+        for (int i = 0; i < N; i += twod1)
+        {
+            int tmp = output[i+twod-1];
+            output[i+twod-1] = output[i+twod1-1];
+            output[i+twod1-1] += tmp;
+        }
+    }
+}
+
+#define MAX_TRIANGLES_PER_THR (3*MAX_TRIANGLES/16)
+uint32_t triangle_list[16][MAX_TRIANGLES_PER_THR];
+
+uint32_t count_triangles_omp(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t NUM_A, uint32_t * output)
+{
     int num_threads = omp_get_max_threads();
-    uint32_t prefix_sum_arr[num_threads];
+    uint32_t prefix_sum_arr[num_threads+1];
 
     // The outer loop traverses over all the vertices. The iteration starts 
     // with vertex 1
     #pragma omp parallel
     {
-        prefix_sum_arr[omp_get_thread_num()] = 0;
+        int thr_id = omp_get_thread_num();
+        prefix_sum_arr[thr_id] = 0;
 
-        #pragma omp for schedule(static, 4) reduction(+: delta)
+        #pragma omp for schedule(static, 4)
         for (uint32_t i = 1; i < N - 1; i++) {
             uint32_t num_nnz_curr_row_x = IA[i + 1] - IA[i];
             uint32_t *x_col_begin = &JA[IA[i]];
@@ -107,47 +138,34 @@ uint32_t count_triangles_omp(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t NU
 
                     // for triangle enumeration i, *x_col_end, *A_col
                     if (*A_col == x_col[k]) {
-                        int idx = delta * 3;
-                        triangle_list[idx] = i;
-                        triangle_list[idx+1] = *A_col;
-                        triangle_list[idx+2] = x_col_end[j];
-                        delta += 1;
-                        prefix_sum_arr[omp_get_thread_num()] += 1;
+                        int idx = prefix_sum_arr[thr_id] * 3;
+                        triangle_list[thr_id][idx] = i;
+                        triangle_list[thr_id][idx+1] = *A_col;
+                        triangle_list[thr_id][idx+2] = x_col_end[j];
+                        prefix_sum_arr[thr_id] += 1;
                     }
                 }
             }
         }
     }
     
-
     int temp = prefix_sum_arr[num_threads-1];
-    // upsweep phase
-    for (int twod = 1; twod < num_threads; twod*=2)
-    {
-        int twod1 = twod*2;
-        // parallel
-        #pragma omp for 
-        for (int i = 0; i < num_threads; i += twod1)
-        {
-            prefix_sum_arr[i+twod1-1] += prefix_sum_arr[i+twod-1];
-        }
-    }
-    prefix_sum_arr[num_threads-1] = 0;
+    cpu_exclusive_scan(num_threads, prefix_sum_arr);
+    prefix_sum_arr[num_threads] = 0;
+    int ret = prefix_sum_arr[num_threads-1] + temp;
 
-    // downsweep phase
-    for (int twod = num_threads/2; twod >= 1; twod /= 2)
+    #pragma omp parallel 
     {
-        int twod1 = twod*2;
-        // parallel
-        #pragma omp for 
-        for (int i = 0; i < num_threads; i += twod1)
-        {
-            int tmp = prefix_sum_arr[i+twod-1];
-            prefix_sum_arr[i+twod-1] = prefix_sum_arr[i+twod1-1];
-            prefix_sum_arr[i+twod1-1] += tmp;
+        int thr_id = omp_get_thread_num();
+        for (uint32_t j = prefix_sum_arr[thr_id]; j < prefix_sum_arr[thr_id+1]; j++) {
+            int oidx = j*3;
+            int iidx = 3*(j - prefix_sum_arr[thr_id]);
+            output[oidx] = triangle_list[thr_id][iidx];
+            output[oidx+1] = triangle_list[thr_id][iidx+1];
+            output[oidx+2] = triangle_list[thr_id][iidx+2];
         }
-    }
+    }    
 
-    return prefix_sum_arr[num_threads-1] + temp;
+    return ret;
 }
 #endif
