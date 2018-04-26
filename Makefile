@@ -7,8 +7,8 @@ NVCCFLAGS=-O3 -m64 --gpu-architecture compute_61
 DEBUG=0
 CFLAGS=-g -O3 -Wall -DDEBUG=$(DEBUG) -std=c++11
 
-CFILES = triangle.cpp triangle_ref.cpp cycletimer.cpp
-HFILES = triangle_ref.h cycletimer.h
+CFILES = triangle.cpp main.cpp cycletimer.cpp
+HFILES = triangle.h cycletimer.h
 OBJS = triangle_cuda.o
 
 all: triangle triangle-omp triangle-cuda

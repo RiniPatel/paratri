@@ -4,7 +4,7 @@ import csv
 import os
 import subprocess
 
-BINARY_NAME = "./triangle"
+BINARY_NAME = "./triangle-omp"
 BECNHMARK_TYPE_SUFFIX = "_adj"
 
 local_benchmarks = [
