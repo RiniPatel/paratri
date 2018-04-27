@@ -104,10 +104,6 @@ int main(int argc, char **argv)
 		return -1;
 	}
 
-	#ifdef CUDA
-	printCudaInfo();
-	#endif
-
 	uint64_t total_triangle_ref = 0;
 	double start, end, timeTaken = 0;
 
