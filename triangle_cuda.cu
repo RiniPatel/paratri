@@ -123,19 +123,18 @@ __global__ void triangle_kernel2(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_
     const int blocks = (N + verticePerBlock - 1) / verticePerBlock;
     const int totalThreads = (threadsPerBlock * blocks);
 
-    int beginVertex = globalThreadIdx * VERTICE_PER_THREAD;
+    // if (device_foo[bla] == 0)
+    //     continue;
+
+    int beginVertex = device_vertice[globalThreadIdx].vertexID;
     int endVertex = min(beginVertex + VERTICE_PER_THREAD, N - 1);
     
     beginVertex = (beginVertex == 0)? beginVertex + 1: beginVertex;
 
     int delta = 0;
 
-    for (int bla = beginVertex; bla < endVertex; bla++)
+    for (int i = beginVertex; i < endVertex; i++)
     {
-        int i = device_vertice[bla].vertexID;
-        if (device_foo[bla] == 0)
-            return;
-        // int i = bla;
         uint32_t num_nnz_curr_row_x = IA[i + 1] - IA[i];
         uint32_t *x_col_begin = &JA[IA[i]];
         uint32_t *row_bound = &JA[IA[i + 1]];
