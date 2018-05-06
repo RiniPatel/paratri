@@ -230,6 +230,7 @@ uint32_t count_triangles_cuda(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t N
     thrust::sort_by_key(device_foo_thrust, device_foo_thrust + totalThreads, device_vertice_thrust);
 
     triangle_kernel2<<<blocks, threadsPerBlock>>>(device_IA, device_JA, N, NUM_A, device_count, device_foo, device_vertice, triangle_list);
+    cudaThreadSynchronize();
 
     thrust::device_ptr<uint32_t> device_count_thrust = thrust::device_pointer_cast(device_count);
     thrust::inclusive_scan(device_count_thrust, device_count_thrust + totalThreads, device_count_thrust);
@@ -250,6 +251,8 @@ uint32_t count_triangles_cuda(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t N
     cudaFree(device_count);
     cudaFree(device_output);
     cudaFree(triangle_list);
+    cudaFree(device_foo);
+    cudaFree(device_vertice);
 
     return num_triangles;
 }
