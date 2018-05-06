@@ -99,6 +99,7 @@ uint32_t count_triangles_omp(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t NU
 {
     int num_threads = omp_get_max_threads();
     uint32_t prefix_sum_arr[num_threads+1];
+    uint32_t local_output[num_threads];
 
     // The outer loop traverses over all the vertices. The iteration starts 
     // with vertex 1
@@ -148,14 +149,16 @@ uint32_t count_triangles_omp(uint32_t *IA, uint32_t *JA, uint32_t N, uint32_t NU
                 }
             }
         }
-        prefix_sum_arr[thr_id] = delta;
+        local_output[thr_id] = delta;
     }
     
     int total = 0;
-    for (int i = 0; i < num_threads; i++) {
-        total += prefix_sum_arr[i];
+    prefix_sum_arr[0] = 0;
+    for (int i = 1; i < num_threads + 1; i++)
+    {
+        prefix_sum_arr[i] = prefix_sum_arr[i-1] + local_output[i-1];
     }
-    prefix_sum_arr[num_threads] = 0;
+    total = prefix_sum_arr[num_threads];
     
     #pragma omp parallel 
     {
